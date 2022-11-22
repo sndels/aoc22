@@ -9,7 +9,9 @@
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/aoc22",
-            "args": [],
+            "args": [
+                "1"
+            ],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "build (debug)"
         }
