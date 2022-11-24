@@ -5,15 +5,26 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "run (debug)",
-            "type": "lldb",
+            "name": "Win run (debug)",
+            "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/zig-out/bin/aoc22",
+            "program": "${workspaceFolder}/zig-out/bin/solution.exe",
             "args": [
-                "0", "1"
+                 "0"
             ],
             "cwd": "${workspaceFolder}",
-            "preLaunchTask": "build (debug)"
+            "preLaunchTask": "Build (debug)"
+        },
+        {
+            "name": "OSX run (debug)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/solution",
+            "args": [
+                 "0"
+            ],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build (debug)"
         }
     ]
 }

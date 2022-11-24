@@ -1,4 +1,5 @@
 const std = @import("std");
+const fmt = std.fmt;
 
 pub fn build(b: *std.build.Builder) void {
     // Standard target options allows the person running `zig build` to choose
@@ -11,7 +12,17 @@ pub fn build(b: *std.build.Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
-    const exe = b.addExecutable("aoc22", "src/main.zig");
+    // Compile only the selected day's solution to the executable
+    const day = b.option(i32, "day", "Day to compile") orelse -1;
+    if (day < 0) {
+        @panic("Please supply -Dday=n to the build command");
+    }
+    const prefix = if (day < 10) "0" else "";
+    const source_path = fmt.allocPrint(b.allocator, "src/day{s}{d}.zig", .{ prefix, day }) catch
+        @panic("Source path allocPrint failed");
+    defer b.allocator.free(source_path);
+
+    const exe = b.addExecutable("solution", source_path);
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
@@ -24,11 +35,4 @@ pub fn build(b: *std.build.Builder) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
-
-    const exe_tests = b.addTest("src/main.zig");
-    exe_tests.setTarget(target);
-    exe_tests.setBuildMode(mode);
-
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&exe_tests.step);
 }
