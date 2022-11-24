@@ -1,4 +1,6 @@
 const std = @import("std");
+const assert = std.debug.assert;
+const fmt = std.fmt;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -7,6 +9,9 @@ pub fn main() !void {
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
+    assert(args.len == 3);
+    const day = try fmt.parseUnsigned(u32, args[1], 10);
+    const part = try fmt.parseUnsigned(u32, args[2], 10);
 
     // stdout is for the actual output of your application, for example if you
     // are implementing gzip, then only the compressed bytes should be sent to
@@ -15,10 +20,7 @@ pub fn main() !void {
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
-    try stdout.print("Got args:\n", .{});
-    for (args) |arg| {
-        try stdout.print("  {s}\n", .{arg});
-    }
+    try stdout.print("Running day {} part {}\n", .{ day, part });
 
     try bw.flush(); // don't forget to flush!
 }

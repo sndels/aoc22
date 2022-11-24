@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/aoc22",
             "args": [
-                "1"
+                "0", "1"
             ],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "build (debug)"
