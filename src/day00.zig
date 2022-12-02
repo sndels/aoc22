@@ -14,7 +14,7 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
     assert(args.len == 2);
     const part = try fmt.parseUnsigned(u32, args[1], 10);
-    assert(part == 0 or part == 1);
+    assert(part == 1 or part == 2);
 
     // Day code here
 
@@ -26,8 +26,8 @@ pub fn main() !void {
 
     // Print result here
     try stdout.print("{s}", .{input});
-    if (part == 1) {
-        try stdout.print("part 1", .{});
+    if (part == 2) {
+        try stdout.print("part 2", .{});
     }
     try bw.flush(); // don't forget to flush!
 }

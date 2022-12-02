@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/solution.exe",
             "args": [
-                 "0"
+                 "1"
             ],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build (debug)"
@@ -21,7 +21,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/solution",
             "args": [
-                 "0"
+                 "1"
             ],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "Build (debug)"

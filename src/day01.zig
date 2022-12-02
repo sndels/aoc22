@@ -17,7 +17,7 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
     assert(args.len == 2);
     const part = try std.fmt.parseUnsigned(u32, args[1], 10);
-    assert(part == 0 or part == 1);
+    assert(part == 1 or part == 2);
 
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
@@ -43,7 +43,7 @@ pub fn main() !void {
     std.sort.sort(u32, total_calories.items, {}, std.sort.desc(u32));
 
     var result: u32 = 0;
-    if (part == 0) {
+    if (part == 1) {
         result = total_calories.items[0];
     } else {
         const items = total_calories.items;
