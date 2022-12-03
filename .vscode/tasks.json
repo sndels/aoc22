@@ -7,7 +7,7 @@
             "command": "zig",
             "args": [
                 "build",
-                "-Dday=2"
+                "-Dday=3"
             ],
             "problemMatcher": []
         }
