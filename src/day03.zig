@@ -1,25 +1,36 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const dbgPrint = std.debug.print;
 const builtin = @import("builtin");
 
 const input = @embedFile("inputs/day03.txt");
-
 const line_ending = if (builtin.os.tag == .windows) "\r\n" else "\n";
 
-pub fn intersect(comptime T: type, sack0: []const T, sack1: []const T, allocator: std.mem.Allocator) !std.ArrayList(T) {
-    var intersection = std.ArrayList(T).init(allocator);
-    for (sack0) |item| {
-        if (std.mem.indexOfScalar(T, sack1, item)) |_| {
-            if (std.mem.indexOfScalar(T, intersection.items, item)) |_| {} else {
-                try intersection.append(item);
-            }
+const UT = u8;
+const UniqueItems = std.AutoHashMap(UT, void);
+
+fn intersect(sack0: UniqueItems, sack1: UniqueItems, allocator: Allocator) !UniqueItems {
+    var intersection = UniqueItems.init(allocator);
+    var sack0_iter = sack0.keyIterator();
+    while (sack0_iter.next()) |item| {
+        if (sack1.contains(item.*)) {
+            try intersection.put(item.*, {});
         }
     }
     return intersection;
 }
 
-pub fn priority(item: u8) u64 {
+fn fold(comptime T: type, items: UniqueItems, func: fn (acc: T, item: UT) T, init: T) T {
+    var acc = init;
+    var iter = items.keyIterator();
+    while (iter.next()) |item| {
+        acc = func(acc, item.*);
+    }
+    return acc;
+}
+
+fn priority(item: u8) u64 {
     if (item >= 'a' and item <= 'z') {
         return item - 'a' + 1;
     } else {
@@ -28,37 +39,66 @@ pub fn priority(item: u8) u64 {
     }
 }
 
-pub fn part1(rucksacks: *std.mem.SplitIterator(u8), allocator: std.mem.Allocator) !u64 {
+fn sumPriority(acc: u64, item: u8) u64 {
+    return acc + priority(item);
+}
+
+fn getUniqueItems(items: []const u8, allocator: Allocator) !UniqueItems {
+    var unique_set = UniqueItems.init(allocator);
+    for (items) |item| {
+        if (!unique_set.contains(item)) {
+            try unique_set.put(item, {});
+        }
+    }
+    return unique_set;
+}
+
+fn part1(rucksacks: *std.mem.SplitIterator(u8), allocator: Allocator) !u64 {
     var priority_sum: u64 = 0;
     while (rucksacks.next()) |sack| {
         const half_len = sack.len / 2;
-        const sack0 = sack[0..half_len];
-        const sack1 = sack[half_len..];
-        assert(sack0.len == sack1.len);
-        const shared_items = try intersect(u8, sack0, sack1, allocator);
-        defer shared_items.deinit();
-        for (shared_items.items) |item| {
-            priority_sum += priority(item);
-        }
+
+        const compartment0 = sack[0..half_len];
+        const compartment1 = sack[half_len..];
+        assert(compartment0.len == compartment1.len);
+
+        var compartment0_unique = try getUniqueItems(compartment0, allocator);
+        defer compartment0_unique.deinit();
+        var compartment1_unique = try getUniqueItems(compartment1, allocator);
+        defer compartment1_unique.deinit();
+
+        var shared_types = try intersect(compartment0_unique, compartment1_unique, allocator);
+        defer shared_types.deinit();
+
+        priority_sum += fold(u64, shared_types, sumPriority, 0);
     }
     return priority_sum;
 }
 
-pub fn part2(rucksacks: *std.mem.SplitIterator(u8), allocator: std.mem.Allocator) !u64 {
+fn part2(rucksacks: *std.mem.SplitIterator(u8), allocator: Allocator) !u64 {
     var priority_sum: u64 = 0;
     var trio: [3][]const u8 = .{ "", "", "" };
     var trio_i: u32 = 0;
     while (rucksacks.next()) |sack| {
         trio[trio_i] = sack;
+
         trio_i += 1;
         if (trio_i == 3) {
-            const shared_items01 = try intersect(u8, trio[0], trio[1], allocator);
-            defer shared_items01.deinit();
-            const shared_items = try intersect(u8, shared_items01.items, trio[2], allocator);
-            defer shared_items.deinit();
-            for (shared_items.items) |item| {
-                priority_sum += priority(item);
-            }
+            var sack0_unique = try getUniqueItems(trio[0], allocator);
+            defer sack0_unique.deinit();
+            var sack1_unique = try getUniqueItems(trio[1], allocator);
+            defer sack1_unique.deinit();
+            var sack2_unique = try getUniqueItems(trio[2], allocator);
+            defer sack2_unique.deinit();
+
+            var shared_types01 = try intersect(sack0_unique, sack1_unique, allocator);
+            defer shared_types01.deinit();
+
+            var shared_types = try intersect(shared_types01, sack2_unique, allocator);
+            defer shared_types.deinit();
+
+            priority_sum += fold(u64, shared_types, sumPriority, 0);
+
             trio_i = 0;
         }
     }
@@ -66,6 +106,7 @@ pub fn part2(rucksacks: *std.mem.SplitIterator(u8), allocator: std.mem.Allocator
 }
 
 pub fn main() !void {
+    // Let's not use the arena allocator to get comfortable with defer dtors
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
