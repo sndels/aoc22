@@ -32,35 +32,26 @@ pub fn main() !void {
     // Requires type to force runtime value
     const marker_len: usize = if (part == 1) 4 else 14;
 
-    var prev_chars= std.fifo.LinearFifo(u8, .Dynamic).init(allocator);
-    defer prev_chars.deinit();
-
-    var input_i: usize = 0;
-    while_input: while (input_i < input_txt.len) : (input_i += 1) {
-        try prev_chars.writeItem(input_txt[input_i]);
-        if (prev_chars.readableLength() > marker_len) {
-            _ = prev_chars.readItem();
-        }
-        if (prev_chars.readableLength() == marker_len) {
-            // Compare all character pairs
-            var i: usize = 0;
-            var all_unique = true;
-            while_i: while (i < marker_len) : (i += 1) {
-                var j: usize = i + 1;
-                while (j < marker_len) : (j += 1) {
-                    if (prev_chars.peekItem(i) == prev_chars.peekItem(j)) {
-                        all_unique = false;
-                        break :while_i;
-                    }
+    var marker_start: usize = 0;
+    while_input: while (marker_start < input_txt.len - marker_len) : (marker_start += 1) {
+        // Compare all character pairs in the supposed marker
+        var i: usize = 0;
+        var all_unique = true;
+        while_i: while (i < marker_len) : (i += 1) {
+            var j: usize = i + 1;
+            while (j < marker_len) : (j += 1) {
+                if (input_txt[marker_start + i] == input_txt[marker_start + j]) {
+                    all_unique = false;
+                    break :while_i;
                 }
             }
-            if (all_unique) {
-                break :while_input;
-            }
+        }
+        if (all_unique) {
+            break :while_input;
         }
     }
 
-    try stdout.print("Need to process {d} characters", .{input_i + 1});
+    try stdout.print("Need to process {d} characters", .{marker_start + marker_len});
 
     // Make sure we end with a newline
     try stdout.print("\n", .{});
