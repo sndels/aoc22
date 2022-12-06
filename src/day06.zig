@@ -32,21 +32,18 @@ pub fn main() !void {
     // Requires type to force runtime value
     const marker_len: usize = if (part == 1) 4 else 14;
 
+    var char_set = std.AutoHashMap(u8, void).init(allocator);
+    defer char_set.deinit();
+
     var marker_start: usize = 0;
     while_input: while (marker_start < input_txt.len - marker_len) : (marker_start += 1) {
         // Compare all character pairs in the supposed marker
         var i: usize = 0;
-        var all_unique = true;
-        while_i: while (i < marker_len) : (i += 1) {
-            var j: usize = i + 1;
-            while (j < marker_len) : (j += 1) {
-                if (input_txt[marker_start + i] == input_txt[marker_start + j]) {
-                    all_unique = false;
-                    break :while_i;
-                }
-            }
+        char_set.clearRetainingCapacity();
+        while (i < marker_len) : (i += 1) {
+            try char_set.put(input_txt[marker_start + i], {});
         }
-        if (all_unique) {
+        if (char_set.count() == marker_len) {
             break :while_input;
         }
     }
