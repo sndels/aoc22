@@ -29,24 +29,26 @@ pub fn main() !void {
     const stdout = bw.writer();
 
     const part = try getPart(allocator);
-
     // Requires type to force runtime value
     const marker_len: usize = if (part == 1) 4 else 14;
-    // Note to self: Find a fifo collection
-    var prev_chars: [14]u8 = [_]u8{0} ** 14;
+
+    var prev_chars= std.fifo.LinearFifo(u8, .Dynamic).init(allocator);
+    defer prev_chars.deinit();
+
     var input_i: usize = 0;
     while_input: while (input_i < input_txt.len) : (input_i += 1) {
-        // Use buffer as a ringbuffer
-        prev_chars[input_i % marker_len] = input_txt[input_i];
-        // We know there are `marker_len` valid previous characters after this point
-        if (input_i >= (marker_len - 1)) {
+        try prev_chars.writeItem(input_txt[input_i]);
+        if (prev_chars.readableLength() > marker_len) {
+            _ = prev_chars.readItem();
+        }
+        if (prev_chars.readableLength() == marker_len) {
             // Compare all character pairs
             var i: usize = 0;
             var all_unique = true;
             while_i: while (i < marker_len) : (i += 1) {
                 var j: usize = i + 1;
                 while (j < marker_len) : (j += 1) {
-                    if (prev_chars[i] == prev_chars[j]) {
+                    if (prev_chars.peekItem(i) == prev_chars.peekItem(j)) {
                         all_unique = false;
                         break :while_i;
                     }
