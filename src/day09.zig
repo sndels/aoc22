@@ -18,159 +18,64 @@ fn getPart(allocator: Allocator) !u32 {
     return part;
 }
 
-const Vec2 = struct {
-    const Self = @This();
+const Vec2 = @Vector(2, i32);
 
-    x: i64,
-    y: i64,
-
-    fn add(self: *const Self, other: Vec2) Vec2 {
-        return Vec2{
-            .x = self.x + other.x,
-            .y = self.y + other.y,
-        };
-    }
-
-    fn sub(self: *const Self, other: Vec2) Vec2 {
-        return Vec2{
-            .x = self.x - other.x,
-            .y = self.y - other.y,
-        };
-    }
-};
+const TailVisits = std.AutoHashMap(Vec2, void);
 
 const Grid = struct {
     const Self = @This();
 
-    data: std.ArrayList(u8),
     width: usize,
     height: usize,
     head: Vec2,
     tail: Vec2,
+    tail_visits: TailVisits,
     allocator: Allocator,
 
     fn init(allocator: Allocator) !Self {
-        const start = Vec2{
-            .x = 0,
-            .y = 4,
-        };
+        const start = Vec2{ 0, 0 };
 
         var ret = Self{
-            .data = std.ArrayList(u8).init(allocator),
             .width = 5,
             .height = 5,
             .head = start,
             .tail = start,
+            .tail_visits = std.AutoHashMap(Vec2, void).init(allocator),
             .allocator = allocator,
         };
-        try ret.data.appendNTimes('.', ret.width * ret.height);
-        ret.mark(start);
+        try ret.mark(start);
 
         return ret;
     }
 
-    fn deinit(self: *const Self) void {
-        self.data.deinit();
+    fn deinit(self: *Self) void {
+        self.tail_visits.deinit();
     }
 
-    fn mark(self: *const Self, coord: Vec2) void {
-        assert(coord.x >= 0);
-        assert(coord.y >= 0);
-        self.data.items[@intCast(usize, coord.y) * self.width + @intCast(usize, coord.x)] = '#';
-    }
-
-    fn maybeReallocate(self: *Self, next_coord: Vec2) !void {
-        const x = next_coord.x;
-        const y = next_coord.y;
-
-        if (x < 0 or x >= self.width) {
-            const extra_columns = 50;
-            const new_width = self.width + extra_columns;
-
-            var new_data = std.ArrayList(u8).init(self.allocator);
-            try new_data.appendNTimes('.', new_width * self.height);
-
-            var i: usize = 0;
-            while (i < self.height) : (i += 1) {
-                var new_offset = i * new_width;
-                if (x < 0) {
-                    new_offset += extra_columns;
-                }
-                const old_offset = i * self.width;
-                std.mem.copy(u8, new_data.items[new_offset..], self.data.items[old_offset..(old_offset + self.width)]);
-            }
-
-            self.data.deinit();
-            self.data = new_data;
-            self.width = new_width;
-            if (x < 0) {
-                self.head.x += extra_columns;
-                self.tail.x += extra_columns;
-            }
-        }
-
-        if (y < 0 or y >= self.height) {
-            const extra_rows = 50;
-            const new_height = self.height + extra_rows;
-
-            var new_data = std.ArrayList(u8).init(self.allocator);
-            try new_data.appendNTimes('.', self.width * new_height);
-
-            const start_i: usize = if (y < 0) extra_rows else 0;
-            var i = start_i;
-            while (i < start_i + self.height) : (i += 1) {
-                const new_offset = i * self.width;
-                const old_offset = (i - start_i) * self.width;
-                std.mem.copy(u8, new_data.items[new_offset..], self.data.items[old_offset..(old_offset + self.width)]);
-            }
-
-            self.data.deinit();
-            self.data = new_data;
-            self.height = new_height;
-            if (y < 0) {
-                self.head.y += extra_rows;
-                self.tail.y += extra_rows;
-            }
-        }
+    fn mark(self: *Self, coord: Vec2) !void {
+        try self.tail_visits.put(coord, {});
     }
 
     fn makeMove(self: *Self, dir: u8, dist: usize) !void {
         const step = switch (dir) {
-            'U' => Vec2{
-                .x = 0,
-                .y = -1,
-            },
-            'D' => Vec2{
-                .x = 0,
-                .y = 1,
-            },
-            'L' => Vec2{
-                .x = -1,
-                .y = 0,
-            },
-            'R' => Vec2{
-                .x = 1,
-                .y = 0,
-            },
+            'U' => Vec2{ 0, 1 },
+            'D' => Vec2{ 0, -1 },
+            'L' => Vec2{ -1, 0 },
+            'R' => Vec2{ 1, 0 },
             else => @panic("Invalid direction"),
         };
 
         var i: usize = 0;
         while (i < dist) : (i += 1) {
-            self.head = self.head.add(step);
+            self.head = self.head + step;
 
-            try self.maybeReallocate(self.head);
-
-            const head_dir = self.head.sub(self.tail);
-            // TODO: integer abs?
-            if (@fabs(@intToFloat(f32, head_dir.x)) > 1 or @fabs(@intToFloat(f32, head_dir.y)) > 1) {
-                // Move at most 1 step in either direction, handling all movement cases
-                const tail_move = Vec2{
-                    .x = @max(@min(head_dir.x, 1), -1),
-                    .y = @max(@min(head_dir.y, 1), -1),
-                };
-                self.tail = self.tail.add(tail_move);
-                self.mark(self.tail);
+            const head_dir = self.head - self.tail;
+            const abs_head_dir = @max(head_dir, head_dir * Vec2{ -1, -1 });
+            if (@reduce(.Or, abs_head_dir > Vec2{ 1, 1 })) {
+                // Move at most 1 step in either direction
+                const tail_move = @max(@min(head_dir, Vec2{ 1, 1 }), Vec2{ -1, -1 });
+                self.tail = self.tail + tail_move;
+                try self.mark(self.tail);
             }
 
             // self.print();
@@ -178,25 +83,45 @@ const Grid = struct {
     }
 
     fn print(self: *const Self) void {
-        var j: usize = 0;
-        while (j < self.height) : (j += 1) {
-            var i: usize = 0;
-            while (i < self.width) : (i += 1) {
-                if (self.head.x == i and self.head.y == j) {
+        var min_p = self.head;
+        var max_p = self.head;
+        min_p = @min(min_p, self.tail);
+        max_p = @max(max_p, self.tail);
+
+        var keys = self.tail_visits.keyIterator();
+        while (keys.next()) |key| {
+            min_p = @min(min_p, key.*);
+            max_p = @max(max_p, key.*);
+        }
+
+        const width = max_p[0] - min_p[0] + 1;
+        const height = max_p[1] - min_p[1] + 1;
+
+        // Coordinate system is X left, Y up
+        const top_left = Vec2{ min_p[0], max_p[1] };
+
+        var j: i32 = 0;
+        while (j < height) : (j += 1) {
+            var i: i32 = 0;
+            while (i < width) : (i += 1) {
+                // Down is -Y
+                const pos = top_left + Vec2{ i, -j };
+                if (@reduce(.And, pos == self.head)) {
                     dbgPrint("H", .{});
-                } else if (self.tail.x == i and self.tail.y == j) {
+                } else if (@reduce(.And, pos == self.tail)) {
                     dbgPrint("T", .{});
+                } else if (self.tail_visits.contains(pos)) {
+                    dbgPrint("#", .{});
                 } else {
-                    dbgPrint("{c}", .{self.data.items[j * self.width + i]});
+                    dbgPrint(".", .{});
                 }
             }
             dbgPrint("\n", .{});
         }
-        dbgPrint("\n", .{});
     }
 
     fn countTailVisits(self: *const Self) usize {
-        return std.mem.count(u8, self.data.items, "#");
+        return self.tail_visits.count();
     }
 };
 
