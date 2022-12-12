@@ -34,12 +34,14 @@ const HeightMap = struct {
     rows: std.ArrayList([]const u8),
     width: usize,
     height: usize,
+    signal_point: Vec2,
 
     fn init(allocator: Allocator) Self {
         return Self{
             .rows = std.ArrayList([]const u8).init(allocator),
             .width = 0,
             .height = 0,
+            .signal_point = null_pos,
         };
     }
 
@@ -69,6 +71,13 @@ fn parseInput(allocator: Allocator) !HeightMap {
 
     height_map.width = rows.items[0].len;
     height_map.height = rows.items.len;
+
+    for (height_map.rows.items) |row, row_i| {
+        if (std.mem.indexOf(u8, row, "E")) |i| {
+            height_map.signal_point = Vec2{ i, row_i };
+        }
+    }
+    assert(@reduce(.And, height_map.signal_point != null_pos));
 
     return height_map;
 }
@@ -100,7 +109,9 @@ fn heightDiff(from: u8, to: u8) i8 {
 fn updateNeighbor(neighbor_pos: Vec2, new_distance: u64, self_height: u8, height_map: HeightMap, queue: *PosQueue, distances: *DistanceMap) !void {
     const neighbor_height = height_map.getHeight(neighbor_pos);
 
-    if (heightDiff(self_height, neighbor_height) <= 1) {
+    // Check height diff from neighbor as that is the height diff from low to high
+    // while traversing high to low
+    if (heightDiff(neighbor_height, self_height) <= 1) {
         if (distances.get(neighbor_pos).? == not_seen_distance) {
             try queue.writeItem(neighbor_pos);
         }
@@ -109,12 +120,11 @@ fn updateNeighbor(neighbor_pos: Vec2, new_distance: u64, self_height: u8, height
     }
 }
 
-fn findShortestPathSteps(height_map: HeightMap, start: Vec2, end: Vec2, allocator: Allocator) !u64 {
+fn findShortestPathSteps(height_map: HeightMap, allocator: Allocator) !DistanceMap {
     var queue = PosQueue.init(allocator);
     defer queue.deinit();
 
     var distances = DistanceMap.init(allocator);
-    defer distances.deinit();
 
     {
         var j: usize = 0;
@@ -125,18 +135,12 @@ fn findShortestPathSteps(height_map: HeightMap, start: Vec2, end: Vec2, allocato
             }
         }
     }
-    try distances.put(start, 0);
+    try distances.put(height_map.signal_point, 0);
 
-    try queue.writeItem(start);
+    try queue.writeItem(height_map.signal_point);
 
-    var steps: u64 = std.math.maxInt(u64);
     while (queue.readItem()) |pos| {
         assert(distances.get(pos).? < not_seen_distance);
-
-        if (@reduce(.And, pos == end)) {
-            steps = distances.get(pos).?;
-            break;
-        }
 
         const new_distance = distances.get(pos).? + 1;
         const self_height = height_map.getHeight(pos);
@@ -159,7 +163,7 @@ fn findShortestPathSteps(height_map: HeightMap, start: Vec2, end: Vec2, allocato
         }
     }
 
-    return steps;
+    return distances;
 }
 
 pub fn main() !void {
@@ -174,35 +178,37 @@ pub fn main() !void {
 
     const part = try getPart(allocator);
 
+    var timer = try std.time.Timer.start();
+
     const height_map = try parseInput(allocator);
     defer height_map.deinit();
 
+    // Fill out all shortest paths from the signal point to avoid duplicate work
+    // in part 2
+    // Distances are not really symmertric with the neighbor height limit, but we can
+    // traverse while checking the height delta from neighbor to the current square
+    // to fill out the distances from lowland to the signal point
+    var distances = try findShortestPathSteps(height_map, allocator);
+    defer distances.deinit();
+
     if (part == 1) {
         var start = null_pos;
-        var end = null_pos;
         for (height_map.rows.items) |row, row_i| {
             if (std.mem.indexOf(u8, row, "S")) |i| {
                 start = Vec2{ i, row_i };
             }
-            if (std.mem.indexOf(u8, row, "E")) |i| {
-                end = Vec2{ i, row_i };
-            }
         }
         assert(@reduce(.And, start != null_pos));
-        assert(@reduce(.And, end != null_pos));
 
-        const steps = try findShortestPathSteps(height_map, start, end, allocator);
+        const steps = distances.get(start).?;
         try stdout.print("Fewest steps from start to end is {d}", .{steps});
     } else {
         var starts = std.ArrayList(Vec2).init(allocator);
         defer starts.deinit();
-        var end = null_pos;
+
         for (height_map.rows.items) |row, row_i| {
             if (std.mem.indexOf(u8, row, "S")) |i| {
                 try starts.append(Vec2{ i, row_i });
-            }
-            if (std.mem.indexOf(u8, row, "E")) |i| {
-                end = Vec2{ i, row_i };
             }
 
             var first_i: usize = 0;
@@ -215,13 +221,10 @@ pub fn main() !void {
                 }
             }
         }
-        assert(@reduce(.And, end != null_pos));
 
         var least_steps: u64 = std.math.maxInt(u64);
-        for (starts.items) |start, start_i| {
-            dbgPrint("{d} ", .{start_i});
-            const steps = try findShortestPathSteps(height_map, start, end, allocator);
-            dbgPrint("{d}\n", .{steps});
+        for (starts.items) |start| {
+            const steps = distances.get(start).?;
             least_steps = @min(steps, least_steps);
         }
         try stdout.print("Shortest scenic route has {d} steps", .{least_steps});
@@ -229,5 +232,8 @@ pub fn main() !void {
 
     // Make sure we end with a newline
     try stdout.print("\n", .{});
+
+    try stdout.print("Took {d}ms\n ", .{timer.read() / std.time.ns_per_ms});
+
     try bw.flush(); // don't forget to flush!
 }
