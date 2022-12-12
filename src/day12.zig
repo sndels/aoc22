@@ -25,15 +25,8 @@ fn last(comptime T: type, array: *std.ArrayList(T)) *T {
 const Vec2 = @Vector(2, usize);
 const null_pos = Vec2{ std.math.maxInt(usize), std.math.maxInt(usize) };
 const not_seen_distance = std.math.maxInt(u64);
-const PosQueue = std.PriorityQueue(Vec2, DistanceMap, closerThan);
+const PosQueue = std.fifo.LinearFifo(Vec2, .Dynamic);
 const DistanceMap = std.AutoHashMap(Vec2, u64);
-
-fn closerThan(context: DistanceMap, a: Vec2, b: Vec2) std.math.Order {
-    assert(context.contains(a));
-    assert(context.contains(b));
-
-    return std.math.order(context.get(a).?, context.get(b).?);
-}
 
 const HeightMap = struct {
     const Self = @This();
@@ -125,7 +118,7 @@ fn updateNeighbor(neighbor_pos: Vec2, new_distance: u64, self_height: u8, height
 
     if (heightDiff(self_height, neighbor_height) <= 1) {
         if (distances.get(neighbor_pos).? == not_seen_distance) {
-            try queue.add(neighbor_pos);
+            try queue.writeItem(neighbor_pos);
         }
 
         try updateDistance(neighbor_pos, new_distance, distances);
@@ -148,11 +141,12 @@ pub fn main() !void {
     defer height_map.deinit();
 
     if (part == 1) {
-        var queue = PosQueue.init(allocator, DistanceMap.init(allocator));
+        var queue = PosQueue.init(allocator);
         defer queue.deinit();
-        defer queue.context.deinit();
 
-        var distances = &queue.context;
+        var distances = DistanceMap.init(allocator);
+        defer distances.deinit();
+
         {
             var j: usize = 0;
             while (j < height_map.height) : (j += 1) {
@@ -164,11 +158,10 @@ pub fn main() !void {
         }
         try distances.put(height_map.start, 0);
 
-        try queue.add(height_map.start);
+        try queue.writeItem(height_map.start);
 
         var end_steps: u64 = std.math.maxInt(u64);
-        while (queue.peek()) |_| {
-            const pos = queue.remove();
+        while (queue.readItem()) |pos| {
             assert(distances.get(pos).? < not_seen_distance);
 
             if (@reduce(.And, pos == height_map.end)) {
@@ -181,19 +174,19 @@ pub fn main() !void {
 
             if (pos[0] > 0) {
                 const neighbor_pos = Vec2{ pos[0] - 1, pos[1] };
-                try updateNeighbor(neighbor_pos, new_distance, self_height, height_map, &queue, distances);
+                try updateNeighbor(neighbor_pos, new_distance, self_height, height_map, &queue, &distances);
             }
             if (pos[1] > 0) {
                 const neighbor_pos = Vec2{ pos[0], pos[1] - 1 };
-                try updateNeighbor(neighbor_pos, new_distance, self_height, height_map, &queue, distances);
+                try updateNeighbor(neighbor_pos, new_distance, self_height, height_map, &queue, &distances);
             }
             if (pos[0] < height_map.width - 1) {
                 const neighbor_pos = Vec2{ pos[0] + 1, pos[1] };
-                try updateNeighbor(neighbor_pos, new_distance, self_height, height_map, &queue, distances);
+                try updateNeighbor(neighbor_pos, new_distance, self_height, height_map, &queue, &distances);
             }
             if (pos[1] < height_map.height - 1) {
                 const neighbor_pos = Vec2{ pos[0], pos[1] + 1 };
-                try updateNeighbor(neighbor_pos, new_distance, self_height, height_map, &queue, distances);
+                try updateNeighbor(neighbor_pos, new_distance, self_height, height_map, &queue, &distances);
             }
         }
 
